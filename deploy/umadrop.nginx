@@ -1,0 +1,17 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name umadrop.0xcjy.top;
+
+    root /var/www/umadrop;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(?:mp3|png|gif|json)$ {
+        add_header Cache-Control "public, max-age=86400";
+        try_files $uri =404;
+    }
+}

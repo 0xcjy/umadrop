@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Helios</title>
+<title>Uma</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -152,19 +152,58 @@
   }
   #plushCounter.show { transform: translateX(0); }
   #plushCounter b { color: #FFFDE7; font-size: 17px; }
+
+  #characterPicker {
+    position: fixed;
+    top: 18px;
+    left: 18px;
+    z-index: 80;
+    width: min(240px, calc(100vw - 36px));
+    max-height: min(70vh, 560px);
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid rgba(16,25,46,.12);
+    border-radius: 16px;
+    background: rgba(255,255,255,.9);
+    box-shadow: 0 10px 30px rgba(16,25,46,.16);
+    backdrop-filter: blur(10px);
+    transition: width .2s ease, padding .2s ease;
+  }
+  .character-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  #characterPicker h2 { margin: 0; font-size: 14px; letter-spacing: .04em; }
+  #characterToggle { width: 28px; height: 28px; border: 0; border-radius: 8px; background: var(--accent-soft); color: var(--ink); cursor: pointer; font-size: 18px; line-height: 1; }
+  #characterToggle:hover, #characterToggle:focus-visible { background: var(--accent); color: #fff; }
+  #characterPicker.collapsed { width: 52px; padding: 8px; }
+  #characterPicker.collapsed .character-picker-head { margin: 0; justify-content: center; }
+  #characterPicker.collapsed h2, #characterPicker.collapsed #characterGrid { display: none; }
+  #characterGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .character-card { border: 2px solid transparent; border-radius: 11px; padding: 5px; background: #f4f1fb; color: var(--ink); cursor: pointer; text-align: center; font: inherit; }
+  .character-card:hover { border-color: var(--accent); }
+  .character-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .character-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; }
+  .character-card span { display: block; margin-top: 3px; font-size: 11px; font-weight: 600; }
+  @media (max-width: 600px) { #characterPicker { top: 10px; left: 10px; width: 188px; max-height: 48vh; } #characterGrid { grid-template-columns: repeat(3, 1fr); } }
 </style>
 </head>
 <body>
 
 <canvas id="world"></canvas>
 
-<div id="hint">点一下掉一只 Helios · 按住不放连发</div>
+<section id="characterPicker" aria-label="角色选择">
+  <div class="character-picker-head">
+    <h2>选择角色</h2>
+    <button id="characterToggle" type="button" aria-label="隐藏角色选择" aria-expanded="true">‹</button>
+  </div>
+  <div id="characterGrid"></div>
+</section>
+
+<div id="hint">点一下掉一只 Uma · 按住不放连发</div>
 
 <button id="secretToggle" aria-label="secret menu">⋯</button>
 <div id="secretMenu">
   <label class="secret-menu-item">
     <input type="checkbox" id="unlimitedCheckbox">
-    Unlimited Helios Works
+    Unlimited Uma Works
   </label>
   <label class="secret-menu-item">
     <input type="checkbox" id="mobileGravityCheckbox">
@@ -181,11 +220,11 @@
 
 <!-- ============================================================
      GIF 解码器：自带 LZW 解码 + 帧合成（disposal 处理），
-     零外部依赖。素材全部由 HeliosGif.decode(url) 解码为
+     零外部依赖。素材全部由 UmaGif.decode(url) 解码为
      { frames:[{canvas,delay}], cum:[ms], duration, drawAspect }。
      ============================================================ -->
 <script>
-const HeliosGif = (() => {
+const UmaGif = (() => {
   // ---------- LZW ----------
   function lzwDecode(minCodeSize, data) {
     const clear = 1 << minCodeSize, eoi = clear + 1;
@@ -436,6 +475,65 @@ const CONFIG = {
   plushScaleMin: 0.45
 };
 
+let characters = [];
+let selectedCharacter = null;
+const characterGrid = document.getElementById('characterGrid');
+const characterPicker = document.getElementById('characterPicker');
+const characterToggle = document.getElementById('characterToggle');
+
+function setCharacterPickerOpen(open) {
+  characterPicker.classList.toggle('collapsed', !open);
+  characterToggle.setAttribute('aria-expanded', String(open));
+  characterToggle.setAttribute('aria-label', open ? '隐藏角色选择' : '展开角色选择');
+  characterToggle.textContent = open ? '‹' : '›';
+  localStorage.setItem('uma-character-picker-open', open ? '1' : '0');
+}
+
+characterToggle.addEventListener('click', () => {
+  setCharacterPickerOpen(characterPicker.classList.contains('collapsed'));
+});
+setCharacterPickerOpen(localStorage.getItem('uma-character-picker-open') !== '0');
+
+async function loadCharacters() {
+  const res = await fetch('assets/characters.json');
+  if (!res.ok) throw new Error('角色清单加载失败');
+  characters = await res.json();
+  const names = {
+    '1001': '特别周', '1002': '无声铃鹿', '1003': '东海帝王', '1004': '丸善斯基',
+    '1005': '富士奇石', '1006': '小栗帽', '1007': '黄金船', '1008': '伏特加',
+    '1009': '大和赤骥', '1010': '大树快车', '1011': '草上飞', '1012': '菱亚马逊'
+  };
+  for (const ch of characters) {
+    ch.name = names[ch.id] || ch.name;
+    ch.images = ch.images || (ch.image ? [ch.image] : []);
+    const card = document.createElement('button');
+    card.type = 'button'; card.className = 'character-card'; card.dataset.id = ch.id;
+    card.innerHTML = `<img loading="lazy" decoding="async" src="${ch.images[0] || ''}" alt="${ch.name}"><span>${ch.name}</span>`;
+    card.addEventListener('click', () => selectCharacter(ch.id));
+    characterGrid.appendChild(card);
+  }
+  if (characters.length) selectCharacter(characters[0].id);
+}
+
+async function ensureCharacterAssets(ch) {
+  if (!ch || ch.anims) return ch;
+  ch.anims = [];
+  await Promise.all(ch.images.map(async (imageSrc) => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = imageSrc;
+    await img.decode().catch(() => {});
+    ch.anims.push({ frames: [img], duration: 1, drawAspect: (img.naturalWidth || 1) / (img.naturalHeight || 1), frameAt: () => img, src: imageSrc });
+  }));
+  return ch;
+}
+
+async function selectCharacter(id) {
+  selectedCharacter = characters.find(c => c.id === String(id)) || characters[0] || null;
+  document.querySelectorAll('.character-card').forEach(card => card.classList.toggle('selected', card.dataset.id === selectedCharacter?.id));
+  await ensureCharacterAssets(selectedCharacter);
+}
+
 function plushScale() {
   return Math.max(CONFIG.plushScaleMin, Math.min(1, canvas.width / CONFIG.plushScaleDivisor));
 }
@@ -465,7 +563,7 @@ async function loadAssets() {
   ];
   try {
     for (const item of gifList) {
-      const anim = await HeliosGif.decode(item.url, CONFIG.cacheMaxSide);
+      const anim = await UmaGif.decode(item.url, CONFIG.cacheMaxSide);
       anim.src = item.url;
       animPool[item.type].push(anim);
     }
@@ -597,7 +695,10 @@ function spawnObject(x, y) {
   // 稀有度：特殊款用专属 GIF + 专属音频，否则普通款随机 GIF + wei
   const special = rollSpecial();
   let anim;
-  if (special) {
+  if (selectedCharacter && selectedCharacter.anims?.length) {
+    anim = randomFrom(selectedCharacter.anims);
+    playOneShot(randomFrom(selectedCharacter.audios));
+  } else if (special) {
     const specialAnim = animPool.special.find(a => a.src === special.gif);
     anim = specialAnim || randomFrom(animPool.normal);
     if (specialAnim) {
@@ -942,6 +1043,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) stopH
 loadAssets().catch((e) => {
   showLoadError('加载失败：' + e.message);
 });
+loadCharacters().catch((e) => showLoadError('角色加载失败：' + e.message));
 </script>
 </body>
 </html>
