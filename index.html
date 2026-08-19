@@ -173,9 +173,12 @@
   #characterPicker h2 { margin: 0; font-size: 14px; letter-spacing: .04em; }
   #characterToggle { width: 28px; height: 28px; border: 0; border-radius: 8px; background: var(--accent-soft); color: var(--ink); cursor: pointer; font-size: 18px; line-height: 1; }
   #characterToggle:hover, #characterToggle:focus-visible { background: var(--accent); color: #fff; }
+  #randomCharacter { width: 100%; margin: 0 0 10px; padding: 8px 10px; border: 0; border-radius: 9px; background: var(--ink); color: #fff; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+  #randomCharacter:hover, #randomCharacter:focus-visible { background: var(--accent); }
   #characterPicker.collapsed { width: 52px; padding: 8px; }
   #characterPicker.collapsed .character-picker-head { margin: 0; justify-content: center; }
   #characterPicker.collapsed h2, #characterPicker.collapsed #characterGrid { display: none; }
+  #characterPicker.collapsed #randomCharacter { display: none; }
   #characterGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .character-card { border: 2px solid transparent; border-radius: 11px; padding: 5px; background: #f4f1fb; color: var(--ink); cursor: pointer; text-align: center; font: inherit; }
   .character-card:hover { border-color: var(--accent); }
@@ -194,6 +197,7 @@
     <h2>选择角色</h2>
     <button id="characterToggle" type="button" aria-label="隐藏角色选择" aria-expanded="true">‹</button>
   </div>
+  <button id="randomCharacter" type="button">随机角色</button>
   <div id="characterGrid"></div>
 </section>
 
@@ -480,6 +484,7 @@ let selectedCharacter = null;
 const characterGrid = document.getElementById('characterGrid');
 const characterPicker = document.getElementById('characterPicker');
 const characterToggle = document.getElementById('characterToggle');
+const randomCharacter = document.getElementById('randomCharacter');
 
 function setCharacterPickerOpen(open) {
   characterPicker.classList.toggle('collapsed', !open);
@@ -491,6 +496,12 @@ function setCharacterPickerOpen(open) {
 
 characterToggle.addEventListener('click', () => {
   setCharacterPickerOpen(characterPicker.classList.contains('collapsed'));
+});
+randomCharacter.addEventListener('click', () => {
+  if (!characters.length) return;
+  const pool = characters.filter(ch => ch !== selectedCharacter);
+  const next = randomFrom(pool.length ? pool : characters);
+  selectCharacter(next.id);
 });
 setCharacterPickerOpen(localStorage.getItem('uma-character-picker-open') !== '0');
 
