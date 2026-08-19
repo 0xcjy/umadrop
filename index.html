@@ -728,7 +728,12 @@ async function spawnObject(x, y) {
   // 稀有度：特殊款用专属 GIF + 专属音频，否则普通款随机 GIF + wei
   const special = rollSpecial();
   let anim;
-  if (characterForSpawn && characterForSpawn.anims?.length) {
+  if (randomCharacterMode) {
+    // Random mode is character-only: never fall through to legacy GIF assets.
+    if (!characterForSpawn?.anims?.length) return;
+    anim = randomFrom(characterForSpawn.anims);
+    playOneShot(randomFrom(characterForSpawn.audios));
+  } else if (characterForSpawn?.anims?.length) {
     anim = randomFrom(characterForSpawn.anims);
     playOneShot(randomFrom(characterForSpawn.audios));
   } else if (special) {
