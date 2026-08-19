@@ -427,8 +427,18 @@ const CONFIG = {
   maxPlushies: 100,                   // 默认上限（无限模式可解除）
   holdDelay: 350,                     // 按住多久后开始连发 ms
   spawnCooldown: 70,                  // 连发间隔 ms
-  cacheMaxSide: 256                   // 缓存帧最大边长 px（显存/内存上限）
+  cacheMaxSide: 256,                  // 缓存帧最大边长 px（显存/内存上限）
+  // 玩偶大小：直径在 [下限, 上限] 之间随机；再乘屏幕缩放系数
+  // 缩放 = clamp(屏幕宽度 / plushScaleDivisor, plushScaleMin, 1)
+  // —— 手机窄屏变小，≥divisor 的宽屏保持原大小
+  plushSize: [110, 150],
+  plushScaleDivisor: 800,
+  plushScaleMin: 0.45
 };
+
+function plushScale() {
+  return Math.max(CONFIG.plushScaleMin, Math.min(1, canvas.width / CONFIG.plushScaleDivisor));
+}
 
 /* ============================================================
    素材加载：后台静默解码（无加载界面）。
@@ -573,7 +583,7 @@ function spawnObject(x, y) {
     if (oldest) { Composite.remove(world, oldest); bodyMeta.delete(oldest.id); }
   }
 
-  const baseDiameter = Common.random(110, 150);
+  const baseDiameter = Common.random(CONFIG.plushSize[0], CONFIG.plushSize[1]) * plushScale();
   const radius = baseDiameter / 2;
   const body = Bodies.circle(x, y, radius, {
     restitution: 0.35,
@@ -882,7 +892,8 @@ function startHold(x, y) {
   spawnObject(w.x, w.y);
   holdTimeout = setTimeout(() => {
     spawnInterval = setInterval(() => {
-      const jitter = Common.random(-60, 60);
+      // 抖动范围也随屏幕缩放，小屏上连发不会撒得太开
+      const jitter = Common.random(-60, 60) * plushScale();
       const w2 = screenToWorld(lastPointer.x + jitter, lastPointer.y);
       spawnObject(w2.x, w2.y);
     }, SPAWN_COOLDOWN);

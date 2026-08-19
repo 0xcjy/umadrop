@@ -34,7 +34,10 @@ const CONFIG = {
   maxPlushies: 100,   // 默认上限
   holdDelay: 350,     // 按住多久开始连发 ms
   spawnCooldown: 70,  // 连发间隔 ms
-  cacheMaxSide: 256   // GIF 帧缓存最大边长（内存/显存上限，改大更清晰改小更省内存）
+  cacheMaxSide: 256,  // GIF 帧缓存最大边长（内存/显存上限，改大更清晰改小更省内存）
+  plushSize: [110, 150],       // 玩偶直径范围 px（桌面基准）
+  plushScaleDivisor: 800,      // 屏幕宽度 ÷ 此值 = 缩放系数（≤1）
+  plushScaleMin: 0.45          // 缩放系数下限（手机上玩偶变小）
 };
 ```
 
