@@ -180,6 +180,11 @@
   #characterPicker.collapsed .character-picker-head { margin: 0; justify-content: center; }
   #characterPicker.collapsed h2, #characterPicker.collapsed #characterGrid { display: none; }
   #characterPicker.collapsed #randomCharacter { display: none; }
+  #characterPicker.random-mode h2, #characterPicker.random-mode #characterGrid { display: none; }
+  #characterPicker.random-mode { width: 52px; padding: 8px; }
+  #characterPicker.random-mode .character-picker-head { display: none; }
+  #characterPicker.random-mode #randomCharacter { width: 36px; height: 36px; margin: 0; padding: 0; font-size: 0; }
+  #characterPicker.random-mode #randomCharacter::after { content: '↻'; font-size: 20px; }
   #characterGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .character-card { border: 2px solid transparent; border-radius: 11px; padding: 5px; background: #f4f1fb; color: var(--ink); cursor: pointer; text-align: center; font: inherit; }
   .character-card:hover { border-color: var(--accent); }
@@ -487,6 +492,7 @@ const characterPicker = document.getElementById('characterPicker');
 const characterToggle = document.getElementById('characterToggle');
 const randomCharacter = document.getElementById('randomCharacter');
 let randomCharacterMode = false;
+let lastRandomCharacter = null;
 
 function setCharacterPickerOpen(open) {
   characterPicker.classList.toggle('collapsed', !open);
@@ -502,10 +508,11 @@ characterToggle.addEventListener('click', () => {
 randomCharacter.addEventListener('click', () => {
   randomCharacterMode = !randomCharacterMode;
   randomCharacter.classList.toggle('active', randomCharacterMode);
+  characterPicker.classList.toggle('random-mode', randomCharacterMode);
   randomCharacter.setAttribute('aria-pressed', String(randomCharacterMode));
   randomCharacter.textContent = randomCharacterMode ? '随机角色：开' : '随机角色：关';
   if (randomCharacterMode && characters.length) {
-    const pool = characters.filter(ch => ch !== selectedCharacter);
+    const pool = characters.filter(ch => ch !== lastRandomCharacter);
     selectCharacter(randomFrom(pool.length ? pool : characters).id);
   }
 });
@@ -693,11 +700,14 @@ function rollSpecial() {
 
 async function spawnObject(x, y) {
   if (animPool.normal.length === 0) return;
+  let characterForSpawn = selectedCharacter;
   if (randomCharacterMode && characters.length) {
-    const pool = characters.filter(ch => ch !== selectedCharacter);
-    selectedCharacter = randomFrom(pool.length ? pool : characters);
-    document.querySelectorAll('.character-card').forEach(card => card.classList.toggle('selected', card.dataset.id === selectedCharacter.id));
-    await ensureCharacterAssets(selectedCharacter);
+    const pool = characters.filter(ch => ch !== lastRandomCharacter);
+    characterForSpawn = randomFrom(pool.length ? pool : characters);
+    lastRandomCharacter = characterForSpawn;
+    selectedCharacter = characterForSpawn;
+    document.querySelectorAll('.character-card').forEach(card => card.classList.toggle('selected', card.dataset.id === characterForSpawn.id));
+    await ensureCharacterAssets(characterForSpawn);
   }
   if (!unlimitedMode && spawnOrder.length >= CONFIG.maxPlushies) {
     const oldest = spawnOrder.shift();
@@ -718,9 +728,9 @@ async function spawnObject(x, y) {
   // 稀有度：特殊款用专属 GIF + 专属音频，否则普通款随机 GIF + wei
   const special = rollSpecial();
   let anim;
-  if (selectedCharacter && selectedCharacter.anims?.length) {
-    anim = randomFrom(selectedCharacter.anims);
-    playOneShot(randomFrom(selectedCharacter.audios));
+  if (characterForSpawn && characterForSpawn.anims?.length) {
+    anim = randomFrom(characterForSpawn.anims);
+    playOneShot(randomFrom(characterForSpawn.audios));
   } else if (special) {
     const specialAnim = animPool.special.find(a => a.src === special.gif);
     anim = specialAnim || randomFrom(animPool.normal);
