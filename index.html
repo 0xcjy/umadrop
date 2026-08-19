@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Helios</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #F7E2C2;
+    --ink: #10192E;
+    --ink-soft: #55607A;
+    --panel: #FFFFFF;
+    --accent: #6C5CE7;
+    --accent-soft: #E7E3FB;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  canvas#world {
+    position: fixed;
+    inset: 0;
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ---------- hint ---------- */
+  #hint {
+    position: fixed;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    z-index: 60;
+    padding: 10px 20px;
+    border-radius: 99px;
+    background: rgba(16,25,46,0.82);
+    color: #FFF3B0;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    animation: hintBob 2.2s ease-in-out infinite;
+  }
+  #hint.hide { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  #hint.error {
+    background: rgba(178, 52, 45, 0.92);
+    color: #fff;
+    animation: none;
+  }
+  @keyframes hintBob {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(-6px); }
+  }
+
+  /* ---------- secret button + menu ---------- */
+  /* 隐约可见的 “⋯”，悬停/聚焦变实 —— 藏在右下角最角落 */
+  #secretToggle {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 42px;
+    height: 42px;
+    background: transparent;
+    border: none;
+    border-radius: 12px 0 0 0;
+    cursor: pointer;
+    z-index: 100;
+    opacity: 0.45;
+    color: var(--ink-soft);
+    font-size: 22px;
+    line-height: 1;
+    padding: 0 0 4px;
+    transition: opacity 0.25s ease, background 0.25s ease, color 0.25s ease;
+  }
+  #secretToggle:hover, #secretToggle:focus-visible { opacity: 1; background: var(--accent-soft); color: var(--ink); }
+
+  #secretMenu {
+    position: fixed;
+    bottom: 42px;
+    right: 8px;
+    background: var(--ink);
+    border-radius: 14px;
+    padding: 8px;
+    box-shadow: 0 10px 26px rgba(16,25,46,0.35);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    transform-origin: bottom right;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  #secretMenu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+  .secret-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    font-weight: 500;
+    font-size: 13px;
+    color: #FFF3B0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .secret-menu-item:hover { background: rgba(255,255,255,0.08); }
+  .secret-menu-item input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+  }
+  .secret-menu-item input[type="checkbox"]:disabled { cursor: default; }
+
+  /* ---------- plushie counter ---------- */
+  #plushCounter {
+    position: fixed;
+    bottom: 18px;
+    left: 18px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    background: var(--ink);
+    color: #FFF3B0;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+    box-shadow: 0 6px 18px rgba(16,25,46,0.3);
+    z-index: 90;
+    pointer-events: none;
+    transform: translateX(-140%);
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #plushCounter.show { transform: translateX(0); }
+  #plushCounter b { color: #FFFDE7; font-size: 17px; }
+</style>
+</head>
+<body>
+
+<canvas id="world"></canvas>
+
+<div id="hint">点一下掉一只 Helios · 按住不放连发</div>
+
+<button id="secretToggle" aria-label="secret menu">⋯</button>
+<div id="secretMenu">
+  <label class="secret-menu-item">
+    <input type="checkbox" id="unlimitedCheckbox">
+    Unlimited Helios Works
+  </label>
+  <label class="secret-menu-item">
+    <input type="checkbox" id="mobileGravityCheckbox">
+    Mobile Gravity Mode
+  </label>
+  <label class="secret-menu-item">
+    <input type="checkbox" id="audioCheckbox" checked>
+    Audio
+  </label>
+</div>
+<div id="plushCounter"><b id="plushCount">0</b> plushies</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+<!-- ============================================================
+     GIF 解码器：自带 LZW 解码 + 帧合成（disposal 处理），
+     零外部依赖。素材全部由 HeliosGif.decode(url) 解码为
+     { frames:[{canvas,delay}], cum:[ms], duration, drawAspect }。
+     ============================================================ -->
+<script>
+const HeliosGif = (() => {
+  // ---------- LZW ----------
+  function lzwDecode(minCodeSize, data) {
+    const clear = 1 << minCodeSize, eoi = clear + 1;
+    let codeSize = minCodeSize + 1, dict = new Map(), next = eoi + 1;
+    const reset = () => { dict = new Map(); codeSize = minCodeSize + 1; next = eoi + 1; };
+    let out = [], prev = null;
+    let buf = 0, bits = 0, pos = 0;
+    const read = (n) => {
+      while (bits < n) { buf |= data[pos++] << bits; bits += 8; }
+      const v = buf & ((1 << n) - 1); buf >>>= n; bits -= n;
+      return v;
+    };
+    for (;;) {
+      const code = read(codeSize);
+      if (code === clear) { reset(); prev = null; continue; }
+      if (code === eoi) break;
+      let entry;
+      if (code < clear) entry = [code];
+      else if (code < next) entry = dict.get(code);
+      else if (code === next && prev) entry = prev.concat([prev[0]]);
+      else throw new Error('bad lzw code ' + code);
+      if (!entry) throw new Error('missing dict entry ' + code);
+      for (const v of entry) out.push(v);
+      if (prev !== null && next < 4096) dict.set(next++, prev.concat([entry[0]]));
+      if (next === (1 << codeSize) && codeSize < 12) codeSize++;
+      prev = entry;
+    }
+    return out;
+  }
+
+  // ---------- 解析 GIF 结构 ----------
+  function parseGif(buf) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    if (dv.getUint8(0) !== 0x47 || dv.getUint8(1) !== 0x49 || dv.getUint8(2) !== 0x46) throw new Error('not a gif');
+    const W = dv.getUint16(6, true), H = dv.getUint16(8, true);
+    const packed = dv.getUint8(10);
+    let pos = 13, gct = null;
+    if (packed & 0x80) { const n = 3 * (1 << ((packed & 7) + 1)); gct = buf.slice(pos, pos + n); pos += n; }
+    let gce = { delay: 0, transparent: null, disposal: 0 };
+    const frames = [];
+    while (pos < buf.length) {
+      const sep = buf[pos];
+      if (sep === 0x3B) break;
+      if (sep === 0x21) {
+        const label = buf[pos + 1];
+        if (label === 0xF9) {
+          gce = {
+            delay: dv.getUint16(pos + 4, true),
+            transparent: (dv.getUint8(pos + 3) & 1) ? dv.getUint8(pos + 6) : null,
+            disposal: (dv.getUint8(pos + 3) >> 2) & 7
+          };
+        }
+        pos += 2;
+        for (;;) { const sz = buf[pos]; pos += 1 + sz; if (sz === 0) break; }
+      } else if (sep === 0x2C) {
+        const img = {
+          left: dv.getUint16(pos + 1, true), top: dv.getUint16(pos + 3, true),
+          w: dv.getUint16(pos + 5, true), h: dv.getUint16(pos + 7, true),
+          interlaced: !!(dv.getUint8(pos + 9) & 0x40), ...gce
+        };
+        const lp = dv.getUint8(pos + 9);
+        pos += 10;
+        let ct = gct;
+        if (lp & 0x80) { const n = 3 * (1 << ((lp & 7) + 1)); ct = buf.slice(pos, pos + n); pos += n; }
+        const minCode = buf[pos++];
+        const data = [];
+        for (;;) { const sz = buf[pos]; pos += 1; if (sz === 0) break; data.push(buf.slice(pos, pos + sz)); pos += sz; }
+        frames.push({ ...img, ct, minCode, chunks: data });
+      } else pos++;
+    }
+    // 合并 LZW 数据块（延迟到用的时候拼接，避免 Buffer 依赖）
+    for (const f of frames) {
+      let total = 0;
+      for (const c of f.chunks) total += c.length;
+      const merged = new Uint8Array(total);
+      let o = 0;
+      for (const c of f.chunks) { merged.set(c, o); o += c.length; }
+      f.data = merged;
+      delete f.chunks;
+    }
+    return { W, H, frames };
+  }
+
+  // ---------- 逐帧合成（含 disposal），onFrame 为同步回调 ----------
+  async function walkFrames(buf, onFrame) {
+    const g = parseGif(buf);
+    const { W, H, frames } = g;
+    const canvas = new Uint8ClampedArray(W * H * 4);
+    for (const f of frames) {
+      const before = f.disposal === 3 ? canvas.slice() : null;
+      const idx = lzwDecode(f.minCode, f.data);
+      // 隔行扫描位置表
+      let posArr = null;
+      if (f.interlaced) {
+        posArr = new Uint32Array(f.w * f.h);
+        const order = [[0, 8], [4, 8], [2, 4], [1, 2]];
+        let i = 0;
+        for (const [start, step] of order)
+          for (let y = start; y < f.h; y += step)
+            for (let x = 0; x < f.w; x++) posArr[i++] = y * f.w + x;
+      }
+      for (let p = 0; p < idx.length; p++) {
+        const c = idx[p];
+        const q = posArr ? posArr[p] : p;
+        const px = ((f.top + ((q / f.w) | 0)) * W + f.left + (q % f.w)) * 4;
+        if (c === f.transparent) canvas[px + 3] = 0;
+        else {
+          canvas[px] = f.ct[c * 3];
+          canvas[px + 1] = f.ct[c * 3 + 1];
+          canvas[px + 2] = f.ct[c * 3 + 2];
+          canvas[px + 3] = 255;
+        }
+      }
+      await onFrame({ delay: f.delay * 10, W, H, canvas });
+      // 应用本帧的 disposal，作为下一帧的底
+      if (f.disposal === 3 && before) canvas.set(before);
+      else if (f.disposal === 2 || f.disposal === 3) {
+        for (let y = f.top; y < f.top + f.h; y++) canvas.fill(0, (y * W + f.left) * 4, (y * W + f.left + f.w) * 4);
+      }
+      await new Promise(r => setTimeout(r, 0)); // 让出主线程，保持进度条流畅
+    }
+  }
+
+  function scanBbox(canvas, W, H, cur) {
+    let x1 = cur ? cur.x1 : W, y1 = cur ? cur.y1 : H, x2 = cur ? cur.x2 : 0, y2 = cur ? cur.y2 : 0;
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        if (canvas[row + x * 4 + 3] > 8) {
+          if (x < x1) x1 = x; if (x > x2) x2 = x;
+          if (y < y1) y1 = y; if (y > y2) y2 = y;
+        }
+      }
+    }
+    return { x1, y1, x2, y2 };
+  }
+
+  // ---------- 流式下载（带字节进度） ----------
+  async function fetchBytes(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+    const total = +res.headers.get('content-length') || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.length;
+      if (onProgress) onProgress(got, total);
+    }
+    const out = new Uint8Array(got);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
+  }
+
+  // ---------- 对外：解码一个 GIF 为动画帧序列 ----------
+  // maxSide: 缓存帧最长边像素（限制显存/内存占用）
+  // onProgress(doneFrames, totalFrames)
+  async function decode(url, maxSide, onProgress) {
+    const raw = await fetchBytes(url);
+    // 第一遍：只合成像素，计算全帧并集包围盒（裁掉透明边，让玩偶贴图更紧凑）
+    let union = null;
+    let totalFrames = 0;
+    await walkFrames(raw, (fr) => {
+      totalFrames++;
+      union = scanBbox(fr.canvas, fr.W, fr.H, union);
+    });
+    if (!union || union.x2 < union.x1 || union.y2 < union.y1) throw new Error('gif 没有不透明像素: ' + url);
+
+    // 第二遍：按包围盒裁剪 + 缩放到缓存尺寸
+    const temp = document.createElement('canvas');
+    temp.width = union.x2 - union.x1 + 1;
+    temp.height = union.y2 - union.y1 + 1;
+    const tctx = temp.getContext('2d', { willReadFrequently: true });
+    const full = document.createElement('canvas');
+    const scale = Math.min(1, maxSide / Math.max(temp.width, temp.height));
+    const cw = Math.max(1, Math.round(temp.width * scale));
+    const ch = Math.max(1, Math.round(temp.height * scale));
+    const frames = [];
+    let done = 0;
+    await walkFrames(raw, (fr) => {
+      full.width = fr.W; full.height = fr.H;
+      full.getContext('2d').putImageData(new ImageData(fr.canvas.slice(), fr.W, fr.H), 0, 0);
+      tctx.clearRect(0, 0, temp.width, temp.height);
+      tctx.drawImage(full, union.x1, union.y1, temp.width, temp.height, 0, 0, temp.width, temp.height);
+      const c = document.createElement('canvas');
+      c.width = cw; c.height = ch;
+      c.getContext('2d').drawImage(temp, 0, 0, cw, ch);
+      frames.push({ canvas: c, delay: fr.delay });
+      done++;
+      if (onProgress) onProgress(done, totalFrames);
+    });
+
+    // 累计时长表，供二进制查找当前帧
+    const cum = [0];
+    let duration = 0;
+    for (const f of frames) { duration += f.delay; cum.push(duration); }
+    return {
+      frames, cum, duration,
+      drawAspect: cw / ch,
+      frameAt: (elapsedMs) => {
+        const t = ((elapsedMs % duration) + duration) % duration;
+        let lo = 0, hi = frames.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= t) lo = mid; else hi = mid - 1; }
+        return frames[lo].canvas;
+      }
+    };
+  }
+
+  return { decode, fetchBytes };
+})();
+</script>
+
+<!-- ============================================================
+     游戏主体
+     ============================================================ -->
+<script>
+/* ============================================================
+   配置区 —— 改素材/概率/音频都在这块
+   ============================================================ */
+const CONFIG = {
+  // 普通款 GIF（每只随机挑一张，等概率）
+  normalGifs: [
+    'assets/normal/normal1.gif',
+    'assets/normal/normal2.gif',
+    'assets/normal/normal3.gif',
+    'assets/normal/normal4.gif'
+  ],
+  // 特殊款：gif + 音频 + 概率（1/N，数字越大越稀有）
+  specials: [
+    { gif: 'assets/special/special1.gif', audios: ['assets/audio/special1.mp3'], rarity: 250 },
+    // 特殊2 已删除；特殊3 原本没有专属音频，现在配特殊音频2
+    { gif: 'assets/special/special3.gif', audios: ['assets/audio/special2.mp3'], rarity: 40 }
+  ],
+  weiAudio: 'assets/audio/wei.mp3',  // 每次点击/连发都放一次 wei
+  maxPlushies: 100,                   // 默认上限（无限模式可解除）
+  holdDelay: 350,                     // 按住多久后开始连发 ms
+  spawnCooldown: 70,                  // 连发间隔 ms
+  cacheMaxSide: 256                   // 缓存帧最大边长 px（显存/内存上限）
+};
+
+/* ============================================================
+   素材加载：后台静默解码（无加载界面）。
+   每解码完一张立刻可用 —— 第一张普通款就绪后即可点击出玩偶。
+   ============================================================ */
+const animPool = { normal: [], special: [] }; // anim = {frames,cum,duration,drawAspect,frameAt}
+const audioCache = {};
+
+let weiSfx = null;
+
+const hintEl = document.getElementById('hint');
+
+function showLoadError(msg) {
+  hintEl.textContent = msg;
+  hintEl.classList.remove('hide');
+  hintEl.classList.add('error');
+  console.error(msg);
+}
+
+async function loadAssets() {
+  const gifList = [
+    ...CONFIG.normalGifs.map(g => ({ type: 'normal', url: g })),
+    ...CONFIG.specials.map(s => ({ type: 'special', url: s.gif }))
+  ];
+  try {
+    for (const item of gifList) {
+      const anim = await HeliosGif.decode(item.url, CONFIG.cacheMaxSide);
+      anim.src = item.url;
+      animPool[item.type].push(anim);
+    }
+  } catch (e) {
+    showLoadError('素材加载失败：' + e.message);
+    return false;
+  }
+  if (animPool.normal.length === 0) {
+    showLoadError('没有可用的普通玩偶素材，请检查 assets/normal/ 目录。');
+    return false;
+  }
+  weiSfx = new Audio(CONFIG.weiAudio);
+  weiSfx.preload = 'auto';
+  for (const s of CONFIG.specials) {
+    for (const a of s.audios) if (!audioCache[a]) audioCache[a] = new Audio(a);
+  }
+  return true;
+}
+
+/* ============================================================
+   物理世界（Matter.js）
+   ============================================================ */
+if (typeof Matter === 'undefined') {
+  showLoadError('Matter.js 物理引擎加载失败（网络问题？），刷新页面试试。');
+  throw new Error('Matter.js not loaded');
+}
+const { Engine, Runner, Bodies, Body, Composite, Events, Common } = Matter;
+
+const canvas = document.getElementById('world');
+const ctx = canvas.getContext('2d');
+const plushCounter = document.getElementById('plushCounter');
+const plushCount = document.getElementById('plushCount');
+let lastPlushCountShown = -1;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+
+const engine = Engine.create();
+engine.gravity.y = 1;
+const world = engine.world;
+
+const WALL_OPTS = { isStatic: true, render: { visible: false } };
+let ground, ceiling, leftWall, rightWall;
+
+function buildBounds() {
+  Composite.remove(world, [ground, ceiling, leftWall, rightWall].filter(Boolean));
+  const t = 60;
+  ground = Bodies.rectangle(canvas.width / 2, canvas.height + t / 2 - 8, canvas.width * 14, t, WALL_OPTS);
+  ceiling = Bodies.rectangle(canvas.width / 2, -t / 2 + 8, canvas.width * 14, t, WALL_OPTS);
+  leftWall = Bodies.rectangle(-t / 2 + 4, canvas.height / 2, t, canvas.height * 3, WALL_OPTS);
+  rightWall = Bodies.rectangle(canvas.width + t / 2 - 4, canvas.height / 2, t, canvas.height * 3, WALL_OPTS);
+  Composite.add(world, [ground, ceiling, leftWall, rightWall]);
+}
+buildBounds();
+
+let cameraZoom = 1;
+
+function repositionWalls() {
+  const cx = canvas.width / 2;
+  const cy = canvas.height;
+  Body.setPosition(leftWall, { x: cx - cx / cameraZoom, y: leftWall.position.y });
+  Body.setPosition(rightWall, { x: cx + cx / cameraZoom, y: rightWall.position.y });
+  Body.setPosition(ceiling, { x: ceiling.position.x, y: cy - cy / cameraZoom });
+}
+
+window.addEventListener('resize', () => { resize(); buildBounds(); });
+
+function screenToWorld(sx, sy) {
+  const cx = canvas.width / 2, cy = canvas.height;
+  return { x: (sx - cx) / cameraZoom + cx, y: (sy - cy) / cameraZoom + cy };
+}
+
+/* ============================================================
+   音频：wei 复用单实例重触发（点一下放一次）；
+   特殊音频按文件缓存实例、播放时从头重触发（同一文件不重叠糊音）
+   ============================================================ */
+let audioEnabled = true; // 默认开 —— 点一下就有 wei
+
+function playWei() {
+  if (!audioEnabled || !weiSfx) return;
+  try { weiSfx.currentTime = 0; weiSfx.play().catch(() => {}); } catch (e) {}
+}
+
+function playOneShot(url) {
+  if (!audioEnabled) return;
+  const a = (audioCache[url] || (audioCache[url] = new Audio(url)));
+  a.currentTime = 0;
+  a.play().catch(() => {});
+}
+
+function randomFrom(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+/* ============================================================
+   生成逻辑 + 稀有度
+   ============================================================ */
+const bodyMeta = new Map();
+const spawnOrder = [];
+let unlimitedMode = false;
+
+// 从稀有到不稀有依次掷骰，互斥
+function rollSpecial() {
+  for (const s of CONFIG.specials) {
+    if (Math.random() < 1 / s.rarity) return s;
+  }
+  return null;
+}
+
+function spawnObject(x, y) {
+  if (animPool.normal.length === 0) return;
+  if (!unlimitedMode && spawnOrder.length >= CONFIG.maxPlushies) {
+    const oldest = spawnOrder.shift();
+    if (oldest) { Composite.remove(world, oldest); bodyMeta.delete(oldest.id); }
+  }
+
+  const baseDiameter = Common.random(110, 150);
+  const radius = baseDiameter / 2;
+  const body = Bodies.circle(x, y, radius, {
+    restitution: 0.35,
+    friction: 0.7,
+    frictionStatic: 1.2,
+    frictionAir: 0.0015,
+    density: 0.0022,
+    angle: Common.random(0, Math.PI * 2)
+  });
+
+  // 稀有度：特殊款用专属 GIF + 专属音频，否则普通款随机 GIF + wei
+  const special = rollSpecial();
+  let anim;
+  if (special) {
+    const specialAnim = animPool.special.find(a => a.src === special.gif);
+    anim = specialAnim || randomFrom(animPool.normal);
+    if (specialAnim) {
+      playOneShot(randomFrom(special.audios));
+      burstSparkles(x, y, '#FFF3B0');
+    }
+  } else {
+    anim = randomFrom(animPool.normal);
+    playWei();
+  }
+
+  const drawH = baseDiameter * 1.35;
+  const drawW = drawH * anim.drawAspect;
+
+  bodyMeta.set(body.id, {
+    anim, drawW, drawH, squash: 1,
+    spawnedAt: performance.now(),
+    phase: Math.random() * anim.duration
+  });
+  spawnOrder.push(body);
+  Composite.add(world, body);
+}
+
+/* ---------- 特殊款生成时的星光粒子 ---------- */
+const particles = [];
+function burstSparkles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    const a = Common.random(0, Math.PI * 2);
+    const sp = Common.random(60, 190);
+    particles.push({
+      x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+      life: 0, maxLife: Common.random(400, 700),
+      size: Common.random(3, 7), color
+    });
+  }
+}
+
+/* ============================================================
+   碰撞挤压
+   ============================================================ */
+Events.on(engine, 'collisionStart', (event) => {
+  for (const pair of event.pairs) {
+    const isGroundHit = pair.bodyA === ground || pair.bodyB === ground;
+    for (const b of [pair.bodyA, pair.bodyB]) {
+      const meta = bodyMeta.get(b.id);
+      if (meta) {
+        const speed = Math.min(Math.hypot(b.velocity.x, b.velocity.y), 18);
+        if (speed > 1.5) {
+          const strength = isGroundHit ? speed / 46 : speed / 60;
+          meta.squash = Math.max(isGroundHit ? 0.85 : 0.9, 1 - strength);
+        }
+      }
+    }
+  }
+});
+
+function drawSparkle(x, y, size, alpha, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = size * 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -size);
+  ctx.quadraticCurveTo(size * 0.15, -size * 0.15, size, 0);
+  ctx.quadraticCurveTo(size * 0.15, size * 0.15, 0, size);
+  ctx.quadraticCurveTo(-size * 0.15, size * 0.15, -size, 0);
+  ctx.quadraticCurveTo(-size * 0.15, -size * 0.15, 0, -size);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/* ============================================================
+   渲染循环
+   ============================================================ */
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const bodies = Composite.allBodies(world);
+  const now = performance.now();
+
+  if (unlimitedMode) {
+    const TOP_PADDING = 50;
+    let topEdge = canvas.height;
+    for (const body of bodies) {
+      const meta = bodyMeta.get(body.id);
+      if (!meta) continue;
+      const extent = Math.max(meta.drawW, meta.drawH) / 2;
+      const edge = body.position.y - extent;
+      if (edge < topEdge) topEdge = edge;
+    }
+    const usedHeight = canvas.height - topEdge;
+    let targetZoom = usedHeight > canvas.height - TOP_PADDING
+      ? (canvas.height - TOP_PADDING) / usedHeight : 1;
+    targetZoom = Math.max(0.28, Math.min(1, targetZoom));
+    cameraZoom += (targetZoom - cameraZoom) * 0.06;
+    repositionWalls();
+    if (spawnOrder.length !== lastPlushCountShown) {
+      lastPlushCountShown = spawnOrder.length;
+      plushCount.textContent = lastPlushCountShown;
+    }
+  }
+
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height);
+  ctx.scale(cameraZoom, cameraZoom);
+  ctx.translate(-canvas.width / 2, -canvas.height);
+
+  for (const body of bodies) {
+    const meta = bodyMeta.get(body.id);
+    if (!meta) continue;
+
+    meta.squash += (1 - meta.squash) * 0.2;
+    const scaleY = meta.squash;
+    const scaleX = 1 + (1 - meta.squash) * 0.35;
+
+    ctx.save();
+    ctx.translate(body.position.x, body.position.y);
+    ctx.scale(scaleX, scaleY);
+    ctx.rotate(body.angle);
+
+    ctx.shadowColor = 'rgba(16,25,46,0.22)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 4;
+
+    const frameCanvas = meta.anim.frameAt(now - meta.spawnedAt + meta.phase);
+    ctx.drawImage(frameCanvas, -meta.drawW / 2, -meta.drawH / 2, meta.drawW, meta.drawH);
+    ctx.restore();
+  }
+
+  // 粒子（世界坐标，画在相机变换内，缩放时位置一致）
+  const dt = 16.7;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life += dt;
+    p.vy += 300 * dt / 1000;
+    p.x += p.vx * dt / 1000;
+    p.y += p.vy * dt / 1000;
+    const t = p.life / p.maxLife;
+    if (t >= 1) { particles.splice(i, 1); continue; }
+    drawSparkle(p.x, p.y, p.size * (1 - t * 0.5), (1 - t), p.color);
+  }
+
+  ctx.restore();
+
+  requestAnimationFrame(render);
+}
+
+const runner = Runner.create();
+Runner.run(runner, engine);
+render();
+
+/* ============================================================
+   UI：隐藏菜单 / 无限模式 / 音频 / 手机重力
+   ============================================================ */
+const secretToggle = document.getElementById('secretToggle');
+const secretMenu = document.getElementById('secretMenu');
+const unlimitedCheckbox = document.getElementById('unlimitedCheckbox');
+const mobileGravityCheckbox = document.getElementById('mobileGravityCheckbox');
+const audioCheckbox = document.getElementById('audioCheckbox');
+const hint = document.getElementById('hint');
+
+secretToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  secretMenu.classList.toggle('open');
+});
+secretMenu.addEventListener('click', (e) => e.stopPropagation());
+
+unlimitedCheckbox.addEventListener('change', () => {
+  if (!unlimitedCheckbox.checked) return;
+  unlimitedMode = true;
+  unlimitedCheckbox.disabled = true;
+  plushCounter.classList.add('show');
+});
+
+audioCheckbox.addEventListener('change', () => { audioEnabled = audioCheckbox.checked; });
+
+/* ---------- 手机重力：摇一摇散射 + 倾斜改重力 ---------- */
+let mobileGravityEnabled = false;
+let mobileGravityPermitted = false;
+let lastMotion = null;
+let lastShakeTime = 0;
+const SHAKE_DELTA_THRESHOLD = 16;
+const SHAKE_COOLDOWN = 450;
+
+function handleMotion(event) {
+  if (!mobileGravityEnabled) return;
+  const acc = event.accelerationIncludingGravity || event.acceleration;
+  if (!acc || acc.x === null) return;
+  if (lastMotion) {
+    const dx = acc.x - lastMotion.x, dy = acc.y - lastMotion.y, dz = acc.z - lastMotion.z;
+    const delta = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+    const now = performance.now();
+    if (delta > SHAKE_DELTA_THRESHOLD && now - lastShakeTime > SHAKE_COOLDOWN) {
+      lastShakeTime = now;
+      scatterPlushies(dx, dy, delta);
+    }
+  }
+  lastMotion = { x: acc.x, y: acc.y, z: acc.z };
+}
+
+function scatterPlushies(dirX = 0, dirY = 0, intensityRaw = 0) {
+  const len = Math.hypot(dirX, dirY);
+  let ux, uy;
+  if (len < 0.001) {
+    const a = Common.random(0, Math.PI * 2);
+    ux = Math.cos(a); uy = Math.sin(a);
+  } else {
+    ux = dirX / len; uy = -dirY / len;
+  }
+  const intensity = Math.min(1.6, intensityRaw / 12);
+  for (const body of Composite.allBodies(world)) {
+    if (!bodyMeta.has(body.id)) continue;
+    const spread = Common.random(-0.55, 0.55);
+    const cosT = Math.cos(spread), sinT = Math.sin(spread);
+    const rx = ux * cosT - uy * sinT;
+    const ry = ux * sinT + uy * cosT;
+    const magnitude = body.mass * Common.random(0.02, 0.045) * (0.6 + intensity);
+    Body.applyForce(body, body.position, { x: rx * magnitude, y: ry * magnitude - magnitude * 0.15 });
+  }
+}
+
+const BASE_GRAVITY_Y = 1;
+let neutralBeta = null, neutralGamma = null;
+
+function handleOrientation(event) {
+  if (!mobileGravityEnabled) return;
+  if (event.beta === null || event.gamma === null) return;
+  if (neutralBeta === null) {
+    neutralBeta = event.beta; neutralGamma = event.gamma;
+    return;
+  }
+  const dGamma = event.gamma - neutralGamma;
+  const dBeta = event.beta - neutralBeta;
+  const gammaRad = dGamma * Math.PI / 180;
+  const betaRad = dBeta * Math.PI / 180;
+  engine.gravity.x = Math.sin(gammaRad) * BASE_GRAVITY_Y;
+  engine.gravity.y = Math.cos(betaRad) * BASE_GRAVITY_Y;
+}
+
+async function requestMobileGravityPermission() {
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      if (await DeviceMotionEvent.requestPermission() !== 'granted') return false;
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      if (await DeviceOrientationEvent.requestPermission() !== 'granted') return false;
+    }
+    window.addEventListener('devicemotion', handleMotion);
+    window.addEventListener('deviceorientation', handleOrientation);
+    return true;
+  } catch (err) { return false; }
+}
+
+mobileGravityCheckbox.addEventListener('change', async () => {
+  if (mobileGravityCheckbox.checked) {
+    if (!mobileGravityPermitted) {
+      mobileGravityCheckbox.disabled = true;
+      const granted = await requestMobileGravityPermission();
+      mobileGravityCheckbox.disabled = false;
+      if (!granted) { mobileGravityCheckbox.checked = false; return; }
+      mobileGravityPermitted = true;
+    }
+    mobileGravityEnabled = true;
+  } else {
+    mobileGravityEnabled = false;
+    engine.gravity.x = 0;
+    engine.gravity.y = BASE_GRAVITY_Y;
+    neutralBeta = null; neutralGamma = null;
+    lastMotion = null; lastShakeTime = 0;
+  }
+});
+
+/* ============================================================
+   指针交互：点击生成 + 按住连发 + 安全网
+   ============================================================ */
+const HOLD_DELAY = CONFIG.holdDelay;
+const SPAWN_COOLDOWN = CONFIG.spawnCooldown;
+let holdTimeout = null;
+let spawnInterval = null;
+let lastPointer = { x: 0, y: 0 };
+let activePointerId = null;
+let interacted = false;
+
+function startHold(x, y) {
+  lastPointer.x = x;
+  lastPointer.y = y;
+  const w = screenToWorld(x, y);
+  spawnObject(w.x, w.y);
+  holdTimeout = setTimeout(() => {
+    spawnInterval = setInterval(() => {
+      const jitter = Common.random(-60, 60);
+      const w2 = screenToWorld(lastPointer.x + jitter, lastPointer.y);
+      spawnObject(w2.x, w2.y);
+    }, SPAWN_COOLDOWN);
+  }, HOLD_DELAY);
+}
+
+function stopHold() {
+  clearTimeout(holdTimeout);
+  clearInterval(spawnInterval);
+  holdTimeout = null;
+  spawnInterval = null;
+  activePointerId = null;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (!interacted) {
+    interacted = true;
+    hint.classList.add('hide');
+  }
+  stopHold();
+  activePointerId = e.pointerId;
+  startHold(e.clientX, e.clientY);
+}, { passive: false });
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== activePointerId) return;
+  e.preventDefault();
+  lastPointer.x = e.clientX;
+  lastPointer.y = e.clientY;
+}, { passive: false });
+
+function handlePointerEnd(e) {
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
+  stopHold();
+}
+canvas.addEventListener('pointerup', handlePointerEnd);
+canvas.addEventListener('pointerleave', handlePointerEnd);
+canvas.addEventListener('pointercancel', handlePointerEnd);
+window.addEventListener('blur', stopHold);
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopHold(); });
+
+/* ============================================================
+   启动：后台静默加载素材，直接进入界面
+   ============================================================ */
+loadAssets().catch((e) => {
+  showLoadError('加载失败：' + e.message);
+});
+</script>
+</body>
+</html>
